@@ -1,0 +1,12 @@
+{
+  "angle": 0.060,
+  "motion": 0.72,
+  "front_speed": 0.60,
+  "edge": 0.22,
+  "bloom": 0.66,
+  "rays": 0.40,
+  "threshold": 0.44,
+  "softness": 2.1,
+  "saturation": 1.06,
+  "tyndall_grade": 0.50
+}

@@ -1,0 +1,14 @@
+{
+  "title": "打铁花",
+  "subtitle": "IRON FIREWORKS",
+  "bpm": 152,
+  "beats": 96,
+  "bgm": "synth",
+  "captions": [
+    {"layout": "ignite", "text": "星火初燃", "at": "s2", "offset": 0.4, "dur": 3.6},
+    {"layout": "bloom", "text": "铁水成花", "tag": "MOLTEN IRON", "at": "brk", "offset": 0.0, "dur": 1.55},
+    {"layout": "focus", "text": "旋焦上色", "at": "chill", "offset": 0.2, "dur": 2.1},
+    {"layout": "meteors", "text": "万点流星", "at": "peak", "offset": 0.15, "dur": 6.2},
+    {"layout": "grand", "text": "火树银花", "tag": "IRON FIREWORKS", "at": "fin", "offset": 0.9, "dur": 6.9}
+  ]
+}

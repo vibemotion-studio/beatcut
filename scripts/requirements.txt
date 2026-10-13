@@ -1,0 +1,5 @@
+numpy>=1.24
+moderngl>=5.8
+Pillow>=10
+scipy>=1.10
+opencv-python-headless>=4.8

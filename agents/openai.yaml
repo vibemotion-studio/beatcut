@@ -1,0 +1,4 @@
+interface:
+  display_name: "Beatcut"
+  short_description: "Beat-synced vertical reel from several clips: colorize reveal, captions, BGM, voiceover, effects and a spark finale"
+  default_prompt: "Use $beatcut to turn these clips into a beat-synced vertical reel with a title, music and effects."
