@@ -72,7 +72,7 @@ def main():
     ap.add_argument("--size", default="1080x1920", help="output WxH (default 1080x1920; use 540x960 for a fast preview)")
     ap.add_argument("--fps", type=int, default=30)
     ap.add_argument("--crf", type=int, default=17)
-    ap.add_argument("--params", type=Path, help="JSON file of colorize engine parameters")
+    ap.add_argument("--params", type=Path, help="JSON file of render engine parameters (keys: DEFAULT in scripts/reel/engine.py)")
     ap.add_argument("--work-dir", type=Path, help="cache for decoded clips (default: next to the output)")
     ap.add_argument("--font-serif", help="override the serif font: path or path:index")
     ap.add_argument("--font-sans", help="override the sans font: path or path:index")

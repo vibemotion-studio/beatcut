@@ -5,7 +5,7 @@ description: Turn several video clips into a beat-synced vertical reel built on 
 
 # Beatcut
 
-Builds on `colorize` (same engine, copied into `scripts/colorize.py`). Where `colorize` gives one reveal per clip, this skill plans a whole reel on a beat grid.
+The render engine (black-and-white to color reveal with Tyndall spin focus) is `scripts/reel/engine.py`, derived from vibe-motion/colorize. That tool gives one reveal per clip; this skill plans a whole reel on a beat grid.
 
 ## Workflow
 
@@ -72,7 +72,7 @@ python3 "$skill_dir/scripts/make_reel.py" a.mp4 b.mp4 -o out/m.mp4 --bgm /abs/mu
 | `--bpm`, `--beats` | `152`, `96` | Tempo and length. `--beats` must be at least 10; sections scale with it. |
 | `--size` | `1080x1920` | Output WxH. |
 | `--fps`, `--crf` | `30`, `17` | Frame rate and x264 quality. Use crf 20-22 for files you will share. |
-| `--params` | none | JSON file of colorize engine parameters (see `colorize` SKILL.md). |
+| `--params` | none | JSON file of render engine parameters; the keys are `DEFAULT` in `scripts/reel/engine.py`. |
 | `--work-dir` | next to output | Cache for decoded clips. |
 | `--font-serif`, `--font-sans` | system | Font override: `path` or `path:index`. |
 
@@ -131,7 +131,7 @@ Text is flat white with wide letter-spacing, a soft drop shadow only, and one wa
 
 - Python 3.9+ with `numpy`, `scipy`, `moderngl`, `Pillow`, `opencv-python-headless` (`scripts/requirements.txt`)
 - `ffmpeg` and `ffprobe` on `PATH`
-- OpenGL 3.3 (the colorize engine)
+- OpenGL 3.3 (the render engine)
 - macOS for voiceover (`say`) and the default fonts (Songti SC, PingFang SC). Elsewhere set `REEL_FONT_SERIF` and `REEL_FONT_SANS` to a CJK font; this path is untested.
 
 Tests: `python3 -m pytest tests` from the skill directory (unit tests plus a synthetic-clip end-to-end run).

@@ -8,9 +8,8 @@ from types import SimpleNamespace
 import numpy as np
 from scipy.io import wavfile
 
-from colorize import DEFAULT, Renderer, encoder
-
 from . import audio, bgm, checks
+from .engine import DEFAULT, Renderer, encoder
 from .effects import EFFECTS, Grade, bright, effect_env, punch_env, radial_glow, rgb_split, sat, whip_frame
 from .layouts import blurfill, crop_v, triptych
 from .media import Clip
@@ -26,7 +25,7 @@ ASSETS = Path(__file__).resolve().parents[2] / "assets"
 
 
 def effect_params(extra=None, path=None):
-    """colorize engine parameters: engine defaults, then the night-scene tuning, then file, then extra."""
+    """Render engine parameters: engine defaults, then the night-scene tuning, then file, then extra."""
     p = dict(DEFAULT)
     p.update(json.loads((ASSETS / "params_night.json").read_text()))
     if path:
