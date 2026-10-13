@@ -1,84 +1,57 @@
+<div align="center">
+
 # beatcut
 
-<img src="assets/demo.gif" alt="beatcut demo: colorize reveal, beat cuts, spark finale" width="216" />
+**Beat-synced vertical reels from your own clips.**
 
-中文 | [English](#english)
+Colorize reveal · whip-spin cuts · BGM that never stops · captions · voiceover · 17 effects · 9 transitions · a falling-spark finale
 
-把几段视频做成一条竖屏卡点短片。基于 colorize 的「黑白 → 彩色 + 丁达尔旋焦」引擎，再加上整条片子的节奏、音乐、字幕和特效。
+[English](README.md) | [简体中文](README_CN.md)
 
-- 整片按 BGM 拍点编排（默认 152 bpm，96 拍约 37.9 秒），所有切点踩在拍上
-- 闪白开场 + 上色，慢放光轨，快切，旋焦过场，第二次上色，每拍一切，时间切片三联屏，铁花落下收尾
-- 合成 BGM 全程不断，也可以换成自己的音乐
-- 纯白字幕，5 种版式（竖排、左下双行、顶部收紧、斜向流星、底部逐字踩拍）加一种配音字幕
-- 17 种剪映常用特效、9 种转场，可按拍点或区间叠加
-- 可选配音（macOS `say`），配音时自动压低音乐和原声
+<img src="assets/demo.gif" alt="beatcut demo: title and colorize reveal, one cut per beat, falling-spark finale" width="216" />
 
-## 安装
+<sub>Excerpts of a 37.9 s render on iron-fireworks footage: opening reveal, beat cuts, finale.</sub>
 
-```bash
-git clone <this repo> beatcut && cd beatcut
-python3 -m pip install -r scripts/requirements.txt   # numpy, scipy, moderngl, Pillow, opencv
-```
+</div>
 
-需要 `ffmpeg` / `ffprobe` 和支持 OpenGL 3.3 的环境。作为智能体技能使用时，把整个目录复制到 `~/.claude/skills/beatcut`（或 `~/.agents/skills`、`~/.codex/skills`）即可。
+**beatcut** is an agent skill and a command-line tool. Give it several video clips and it plans the whole reel on a beat grid, renders it at 1080×1920, and mixes music, footage audio, voiceover and sound effects into one MP4. It builds on the [colorize](https://github.com/vibe-motion/colorize) engine (black-and-white to color reveal with Tyndall spin focus).
 
-## 用法
+## Highlights
 
-```bash
-# 快速预览
-python3 scripts/make_reel.py a.mp4 b.mp4 c.mp4 -o out/p.mp4 --size 540x960 --beats 24 --crf 23
+- **Planned on the beat.** The default reel is 96 beats at 152 bpm (37.9 s). Every cut lands on a beat, and the plan scales to any length of 10 beats or more.
+- **A real structure.** Flash opening with a colorize reveal, half-speed light trails, quick plays, a spin-through bridge, a second reveal, one cut per beat, a time-slice triptych, then a falling-spark finale.
+- **Music that never stops.** A synthesized D-major BGM runs from the first to the last sample, or bring your own track.
+- **Flat white typography.** Six caption layouts that differ by position and entrance, never by font or glow.
+- **CapCut-style toolbox.** 17 effects and 9 transitions you can place on beats or over a range of beats.
+- **Voiceover that behaves.** macOS `say` lines duck the music and footage audio and appear as subtitles.
+- **Honest checks.** Each run ends with numeric checks on size, duration, clipping, clicks and silence.
 
-# 打铁花预设（字幕是为打铁花素材写的）
-python3 scripts/make_reel.py a.mp4 b.mp4 c.mp4 d.mp4 -o out/reel.mp4 --preset datihua
+## Quick start
 
-# 自定义标题、字幕、特效、转场、配音
-python3 scripts/make_reel.py a.mp4 b.mp4 -o out/r.mp4 --title "上海" --subtitle "SHANG HAI" \
-  --caption "bloom:外滩@brk+0.2/1.5" --effect "glitch@52-68:beat:0.6" --transition whip \
-  --voiceover "这是第一句@s2"
-
-python3 scripts/make_reel.py --list     # 特效、转场、字幕版式、段落一览
-```
-
-输出末尾会打印 `VALIDATION=PASS` 和 `OUTPUT_VIDEO=<路径>`。校验只看数值：尺寸、时长、音轨、是否削波、是否爆音、音乐是否有断档。它不判断画面好不好看，成片请自己看一遍。
-
-参数、段落表和 spec JSON 格式见 [SKILL.md](SKILL.md)，字幕风格守则见 [references/style-guide.md](references/style-guide.md)。
-
-## 局限
-
-- 配音和默认字体（宋体 SC、苹方 SC）依赖 macOS。其他系统用 `REEL_FONT_SERIF`、`REEL_FONT_SANS` 指定中文字体，这条路径没测过。
-- 字幕版式是为竖屏 1080×1920 设计的，其他比例会按比例缩放，没逐一验证。
-- `assets/effect_maps/` 中的颜色查找表与焦点遮罩取自剪映效果包，仅供学习研究。公开分发前请自行确认授权。
-- 演示 GIF 和 `datihua` 预设使用打铁花素材。
-
-## 测试
+Install as an agent skill, or run it from the command line.
 
 ```bash
-python3 -m pytest tests     # 单元测试 + 合成素材端到端
+git clone https://github.com/vibemotion-studio/beatcut.git
+cd beatcut
+python3 -m pip install -r scripts/requirements.txt
+
+# Claude Code (or ~/.codex/skills, ~/.agents/skills)
+ln -s "$(pwd)" ~/.claude/skills/beatcut
 ```
 
----
+Needs Python 3.9+, `ffmpeg` and `ffprobe` on `PATH`, and an OpenGL 3.3 driver.
 
-## English
+Then ask your agent:
 
-Turn several clips into a beat-synced vertical reel. It builds on the colorize engine (black-and-white to color reveal with Tyndall spin focus) and adds pacing, music, captions and effects for the whole piece.
+| You say | It does |
+| --- | --- |
+| "Make a beat-synced reel from these clips: /abs/a.mp4 /abs/b.mp4" | Renders a 540×960 preview first, then the full 1080×1920 reel |
+| "Add the title 'Shanghai' and a lower-left caption 'The Bund'" | `--title`, `--caption bloom:The Bund@brk` |
+| "Put a glitch on every beat in the middle section" | `--effect glitch@52-68:beat` |
+| "Use this music instead" | `--bgm /abs/music.mp3`, looped and trimmed to fit |
+| "Add a voiceover" | `--voiceover`, with ducking and subtitles |
 
-- The reel is planned on the BGM beat grid (default 152 bpm, 96 beats is about 37.9 s); every cut lands on a beat
-- Flash opening with a color reveal, slow-motion light trails, quick plays, a spin-through bridge, a second reveal, one cut per beat, a time-slice triptych and a falling-spark finale
-- A synthesized BGM that never goes silent, or bring your own music
-- Flat white captions in 5 layouts (vertical column, lower-left lines, top contracting tracking, diagonal meteors, bottom stamped per beat) plus a voiceover subtitle
-- 17 CapCut-style effects and 9 transitions, applied on beats or over a range
-- Optional voiceover (macOS `say`) that ducks the music and footage audio
-
-### Install
-
-```bash
-git clone <this repo> beatcut && cd beatcut
-python3 -m pip install -r scripts/requirements.txt   # numpy, scipy, moderngl, Pillow, opencv
-```
-
-Needs `ffmpeg` / `ffprobe` and OpenGL 3.3. To use it as an agent skill, copy the folder to `~/.claude/skills/beatcut` (or `~/.agents/skills`, `~/.codex/skills`).
-
-### Usage
+## Command line
 
 ```bash
 # Fast preview
@@ -92,22 +65,92 @@ python3 scripts/make_reel.py a.mp4 b.mp4 -o out/r.mp4 --title "Shanghai" --subti
   --caption "bloom:The Bund@brk+0.2/1.5" --effect "glitch@52-68:beat:0.6" --transition whip \
   --voiceover "First line@s2"
 
-python3 scripts/make_reel.py --list     # effects, transitions, caption layouts, sections
+python3 scripts/make_reel.py --list     # every effect, transition, layout and section id
 ```
 
-The run ends with `VALIDATION=PASS` and `OUTPUT_VIDEO=<path>`. The check is numeric only: size, duration, audio track, clipping, clicks, and whether the music ever goes silent. It does not judge how the video looks, so watch the result yourself.
+The run ends with `VALIDATION=PASS` and `OUTPUT_VIDEO=<path>`. All options are listed in [SKILL.md](SKILL.md).
 
-Options, the section table and the spec JSON format are in [SKILL.md](SKILL.md). The caption style rules are in [references/style-guide.md](references/style-guide.md).
+## How a reel is planned
 
-### Limits
+Sections are measured in beats of a 96-beat canon and scale with `--beats`. Clips are used in the order you pass them: the first opens the reel and the last carries the finale.
+
+| Section | Beats | What plays |
+| --- | --- | --- |
+| `intro` | 0-8 | White flash, hold on clip 1, colorize reveal, big title |
+| `s2` | 8-20 | Half-speed play with light trails |
+| `groove1` | 20-32 | Quick plays of 4 beats; the last punches in with a whip-spin |
+| `brk` | 32-36 | Zoomed hold |
+| `groove2` | 36-44 | The last quick play continues |
+| `bridge` | 44-46 | Spin-through bridge ending in a light burst |
+| `chill` | 46-52 | Second colorize reveal |
+| `peak` | 52-68 | One cut per beat with a pulse on every beat |
+| `ramp` | 68-72 | Time-slice triptych |
+| `fin` | 72-96 | Falling-spark finale over slowed footage, then fade to black |
+
+## Effects, transitions, captions
+
+| Effects | |
+| --- | --- |
+| `rgb_split` `shake` `flash` `glitch` `zoom_pulse` `mirror` | 色差 抖动 闪白 故障 心跳 镜像 |
+| `mosaic` `grain` `vhs` `letterbox` `radial_blur` `motion_blur` | 马赛克 胶片颗粒 复古VHS 电影黑边 变焦模糊 动感模糊 |
+| `strobe` `invert` `blur` `ripple` `mono` | 频闪 反色 模糊 水波纹 黑白 |
+
+Effect modes: `always` `beat` `start` `end` `ramp`. Syntax: `--effect name[@from-to][:mode][:amt]`, where `from-to` are beats.
+
+**Transitions:** `fade` `slide` `zoom` `whip` `glitch` `flash` `wipe` `spin` `mosaic`, applied at the quick cuts, the second reveal and the triptych.
+
+**Caption layouts:** `ignite` (vertical column) · `bloom` (lower-left lines) · `focus` (top, tracking contracts) · `meteors` (diagonal cascade) · `grand` (bottom, one character per beat) · `subtitle` (voiceover lines). Syntax: `--caption layout:text@section[+offset][/dur]`.
+
+## Spec file
+
+Presets and `--preset file.json` use the same keys as the flags:
+
+```json
+{
+  "title": "打铁花", "subtitle": "IRON FIREWORKS",
+  "bpm": 152, "beats": 96, "bgm": "synth", "transition": "whip",
+  "captions": [{"layout": "bloom", "text": "铁水成花", "tag": "MOLTEN IRON", "at": "brk", "dur": 1.55}],
+  "effects": [{"name": "glitch", "from": 52, "to": 68, "mode": "beat", "amt": 0.6}],
+  "voiceover": [{"text": "First line", "at": "s2"}],
+  "voice": "Ting-Ting", "duck": 0.5
+}
+```
+
+Unknown keys and bad values are rejected with a message.
+
+## Checks
+
+`VALIDATION` is numeric only: output size, duration, audio track, clipped samples, sample-to-sample clicks, and (with music on) any quiet 0.25 s window. It does not judge how the video looks, so watch the result yourself. The caption style rules and the reel they were measured from are in [references/style-guide.md](references/style-guide.md).
+
+## Repository layout
+
+```text
+beatcut/
+├── SKILL.md                 # agent entry point: workflow, options, sections
+├── presets/datihua.json     # iron-fireworks preset
+├── references/style-guide.md
+├── assets/                  # effect maps, engine parameters, demo GIF
+├── agents/openai.yaml
+├── scripts/
+│   ├── make_reel.py         # command-line entry
+│   └── reel/                # engine, plan, render, media, layouts, effects, transitions,
+│                            # text, sparks, bgm, synth, audio, spec, checks, fonts
+└── tests/                   # unit tests + an end-to-end run on synthetic clips
+```
+
+## Limits
 
 - Voiceover and the default fonts (Songti SC, PingFang SC) need macOS. Elsewhere set `REEL_FONT_SERIF` and `REEL_FONT_SANS` to a CJK font; that path is untested.
-- Caption layouts are designed for 1080x1920 and scale to other sizes; not every size was checked.
-- The color lookup tables and focus mask in `assets/effect_maps/` come from the Jianying (CapCut) effect pack and are for study and research only. Check the licensing yourself before redistributing.
-- The demo GIF and the `datihua` preset use iron-fireworks footage.
+- Caption layouts are designed for 1080×1920 and scale to other sizes; not every size was checked.
+- The `datihua` preset and the demo GIF use iron-fireworks footage.
 
-### Tests
+## Notices
+
+- The render passes in `scripts/reel/engine.py` are derived from [vibe-motion/colorize](https://github.com/vibe-motion/colorize), which ships no license file. Check its terms before redistributing.
+- The color lookup tables and focus mask in `assets/effect_maps/` come from the Jianying (CapCut) effect pack and are for study and research only. Check the licensing yourself before redistributing.
+
+## Tests
 
 ```bash
-python3 -m pytest tests     # unit tests + an end-to-end run on synthetic clips
+python3 -m pytest tests
 ```
