@@ -4,6 +4,7 @@
   "bpm": 152,
   "beats": 96,
   "bgm": "synth",
+  "look": "night",
   "captions": [
     {"layout": "ignite", "text": "星火初燃", "at": "s2", "offset": 0.4, "dur": 3.6},
     {"layout": "bloom", "text": "铁水成花", "tag": "MOLTEN IRON", "at": "brk", "offset": 0.0, "dur": 1.55},

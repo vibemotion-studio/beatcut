@@ -30,7 +30,8 @@ class Shower:
         s = H / 1920.0                                        # lengths and speeds scale with canvas height
         areaf = max(0.25, W * H / (1080 * 1920.0))            # particle counts scale with canvas area
         cnt = lambda n: max(40, int(n * areaf))
-        sc = min(1.0, max(beats, 12) / 24.0)
+        # Short finales compress the waves so the grand bloom (beat 20) lands before the ~1.3 s closing fade.
+        sc = max(0.2, min(1.0, beats / 24.0, (beats - 1.3 / beat) / 20.0))
         T = lambda b: b * sc * beat
         P = []
         self.bursts = []    # (t, cx, cy, bloom gain, bloom radius scale)

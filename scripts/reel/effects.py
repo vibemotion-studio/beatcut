@@ -72,21 +72,31 @@ def radial_glow(W, H):
     return (np.clip(1 - d / 1.15, 0, 1) ** 2.2)[..., None]
 
 
-class Grade:
-    """Vignette + contrast + saturation + a slight warm bias."""
+LOOKS = {   # vignette strength, contrast, saturation, warm bias
+    "neutral": dict(vig=0.22, contrast=1.04, sat=1.04, warm=False),
+    "night": dict(vig=0.38, contrast=1.08, sat=1.10, warm=True),
+}
 
-    def __init__(self, W, H):
+
+class Grade:
+    """Vignette + contrast + saturation. 'night' adds a warm bias for fire and night scenes; 'neutral' stays honest."""
+
+    def __init__(self, W, H, look="night"):
+        if look not in LOOKS:
+            raise ValueError(f"look must be one of {sorted(LOOKS)}, got {look!r}")
+        self.p = LOOKS[look]
         yy, xx = np.mgrid[0:H, 0:W]
         d = np.sqrt(((xx - W / 2) / (W / 2)) ** 2 + ((yy - H / 2) / (H / 2)) ** 2)
-        self.vig = (1 - 0.38 * np.clip(d / 1.35, 0, 1) ** 1.8).astype(np.float32)[..., None]
+        self.vig = (1 - self.p["vig"] * np.clip(d / 1.35, 0, 1) ** 1.8).astype(np.float32)[..., None]
 
     def __call__(self, img):
         f = img.astype(np.float32) * self.vig
-        f = (f - 128) * 1.08 + 128
+        f = (f - 128) * self.p["contrast"] + 128
         g = (f @ LUMA)[..., None]
-        f = g + (f - g) * 1.10
-        f[..., 0] *= 1.03
-        f[..., 2] *= 0.97
+        f = g + (f - g) * self.p["sat"]
+        if self.p["warm"]:
+            f[..., 0] *= 1.03
+            f[..., 2] *= 0.97
         return _u8(f)
 
 

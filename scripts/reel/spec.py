@@ -1,7 +1,9 @@
 """Reel spec: defaults, validation and the small CLI string formats (--effect, --caption)."""
 import re
 
-from .effects import EFFECTS
+from .audio import TTS_ENGINES
+from .effects import EFFECTS, LOOKS
+from .fonts import TYPEFACES
 from .text import LAYOUTS
 from .timing import MIN_BEATS, SECTIONS
 from .transitions import TRANSITIONS
@@ -9,7 +11,8 @@ from .transitions import TRANSITIONS
 SECTION_IDS = [s[0] for s in SECTIONS]
 EFFECT_MODES = ("always", "beat", "start", "end", "ramp")
 DEFAULTS = dict(title="", subtitle="", captions=[], voiceover=[], effects=[], transition=None, bpm=152, beats=96,
-                bgm="synth", params={}, seed=11, voice="Ting-Ting", voice_subtitles=True, duck=0.5)
+                bgm="synth", params={}, seed=11, voice=None, tts="auto", look="neutral", typeface="serif",
+                voice_subtitles=True, duck=0.5)
 
 
 def _num(v, name, lo, hi):
@@ -43,6 +46,11 @@ def normalize(spec):
         raise ValueError(f"unknown transition '{s['transition']}', choose from {sorted(TRANSITIONS)}")
     if not isinstance(s["bgm"], str) or not s["bgm"]:
         raise ValueError("bgm must be 'synth', 'none' or a path to an audio file")
+    for key, allowed in (("look", sorted(LOOKS)), ("tts", list(TTS_ENGINES)), ("typeface", list(TYPEFACES))):
+        if s[key] not in allowed:
+            raise ValueError(f"{key} must be one of {allowed}, got {s[key]!r}")
+    if s["voice"] is not None and not str(s["voice"]).strip():
+        raise ValueError("voice must be a voice name or omitted")
 
     caps = []
     for i, c in enumerate(s["captions"]):
@@ -62,12 +70,15 @@ def normalize(spec):
     vos = []
     for i, v in enumerate(s["voiceover"]):
         w = f"voiceover[{i}]"
-        if not str(v.get("text", "")).strip():
-            raise ValueError(f"{w}: text is empty")
+        text = str(v.get("text") or "").strip()
+        file = str(v.get("file") or "").strip()
+        if not text and not file:
+            raise ValueError(f"{w}: give 'text' (spoken by the TTS engine and shown as a subtitle) or 'file' (a local audio file)")
         at = v.get("at")
         if at is not None and not isinstance(at, str):
             at = _num(at, f"{w}.at", 0, 3600)
-        vos.append(dict(text=str(v["text"]), at=_at(at, w), offset=_num(v.get("offset", 0.0), f"{w}.offset", -30, 300)))
+        vos.append(dict(text=text, file=file, at=_at(at, w),
+                        offset=_num(v.get("offset", 0.0), f"{w}.offset", -30, 300)))
     s["voiceover"] = vos
 
     effs = []

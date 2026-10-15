@@ -17,7 +17,7 @@ The style comes from a 49.4 s, 1080x1920, 30 fps travel reel, measured with open
 
 - Flat white, wide letter-spacing, soft drop shadow only.
 - One warm accent colour, used on thin rules and nowhere else.
-- One serif family for Chinese titles, one light sans for small English tags.
+- One serif family for Chinese titles, one light sans for small English tags. `--typeface sans` swaps every title to a single sans family instead (PingFang SC Semibold, or Noto Sans CJK Bold).
 - Vary position, layout and entrance between captions. Do not vary font or effect.
 - Do not use calligraphy fonts, gold gradients, thick outlines, orange glows or red seals. They were tried and read as dated next to the reference.
 

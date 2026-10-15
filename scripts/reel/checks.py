@@ -44,16 +44,21 @@ def video_curve(path):
 
 
 def audio_stats(path, win_s=0.25):
-    """Peak, clipped-sample count, quietest window rms, count of windows under 0.02 rms, largest sample jump."""
-    r = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-vn", "-ac", "1", "-ar", "22050", "-f", "s16le", "-"],
+    """Peak, saturated-sample count, quietest window rms and the number of windows under 0.02 rms (48 kHz mono).
+
+    Sample-to-sample jumps are deliberately not judged: a crash cymbal and a click look the same to that metric.
+    """
+    r = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-vn", "-ac", "1", "-ar", "48000", "-f", "s16le", "-"],
                        capture_output=True)
+    if r.returncode:
+        raise RuntimeError(f"ffmpeg could not read the audio of {path}: {r.stderr.decode()[-200:]}")
     a = np.frombuffer(r.stdout, np.int16).astype(np.float32) / 32768
     if len(a) < 2:
         return None
-    w = int(22050 * win_s)
+    w = int(48000 * win_s)
     rms = np.array([np.sqrt((a[i:i + w] ** 2).mean()) for i in range(0, max(1, len(a) - w), w)])
     return dict(peak=float(np.abs(a).max()), clipped=int((np.abs(a) > 0.999).sum()), min_rms=float(rms.min()),
-                quiet_windows=int((rms < 0.02).sum()), max_jump=float(np.abs(np.diff(a)).max()))
+                quiet_windows=int((rms < 0.02).sum()))
 
 
 def validate(path, width, height, expect_s, expect_audio, continuous_audio=False):
@@ -66,7 +71,6 @@ def validate(path, width, height, expect_s, expect_audio, continuous_audio=False
         st = audio_stats(path)
         if st:
             res.append(("no clipping", st["clipped"] == 0, f"{st['clipped']} clipped samples, peak {st['peak']:.3f}"))
-            res.append(("no click", st["max_jump"] < 0.9, f"max sample jump {st['max_jump']:.3f}"))
             if continuous_audio:
                 res.append(("music never silent", st["quiet_windows"] == 0,
                             f"{st['quiet_windows']} windows under 0.02 rms, quietest {st['min_rms']:.4f}"))

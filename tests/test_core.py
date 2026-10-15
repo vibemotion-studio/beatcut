@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from reel import audio, bgm, effects, fonts, spec, text, timing, transitions
+from reel import audio, bgm, effects, fonts, media, spec, text, timing, transitions
 from reel.plan import build_plan
 from reel.synth import SR
 
@@ -46,6 +46,10 @@ def test_normalize_defaults_and_isolation():
     {"effects": [{"name": "glitch", "mode": "zzz"}]},
     {"effects": [{"name": "glitch", "from": 5, "to": 5}]},
     {"voiceover": [{"text": ""}]},
+    {"voiceover": [{"text": "", "file": ""}]},
+    {"look": "sepia"},
+    {"tts": "espeak"},
+    {"typeface": "mono"},
 ])
 def test_normalize_rejects(bad):
     with pytest.raises(ValueError):
@@ -159,6 +163,29 @@ def test_plan_needs_clips():
         build_plan([], 24, 152, 30)
 
 
+@pytest.mark.parametrize("nb", [24, 40, 64, 96])
+def test_reveals_finish_inside_their_shot(nb):
+    shots = build_plan([FakeClip(150), FakeClip(120)], nb, 152, 30)
+    reveals = [s for s in shots if s.get("name") in ("intro", "reveal2")]
+    assert reveals
+    for s in reveals:
+        assert s["q"]((s["n"] - 1) / 30) == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("beats", [12, 16, 24, 32])
+def test_grand_bloom_precedes_closing_fade(beats):
+    from reel.sparks import Shower
+    beat = 60 / 152
+    sh = Shower(beat, beats, 108, 192)
+    assert sh.flashes[-1][0] + 1.3 <= beats * beat + 1e-6
+
+
+def test_full_length_finale_timing_unchanged():
+    from reel.sparks import Shower
+    beat = 60 / 152
+    assert Shower(beat, 24, 108, 192).flashes[-1][0] == pytest.approx(20 * beat)
+
+
 # ---------------------------------------------------------------- audio
 def test_bgm_never_silent_and_unclipped():
     a = bgm.render(12, 152)
@@ -184,3 +211,123 @@ def test_mix_reel_peak_and_length():
     music = np.full((SR * 2, 2), 0.5, np.float32)
     out = audio.mix_reel(2.0, music, [], [0.5], None, [])
     assert out.shape == (SR * 2, 2) and np.abs(out).max() <= 0.9
+
+
+def test_prepare_voice_trims_silence_and_sets_loudness():
+    sig = np.zeros((SR * 2, 2), np.float32)
+    sig[SR:SR + SR // 2] = 0.3 * np.sin(np.linspace(0, 400, SR // 2))[:, None]
+    out = audio.prepare_voice(sig)
+    assert len(out) < SR * 0.7
+    assert np.sqrt((out ** 2).mean()) == pytest.approx(audio.VOICE_RMS, rel=0.25)
+    assert np.abs(out).max() <= 0.9 + 1e-6
+    with pytest.raises(ValueError):
+        audio.prepare_voice(np.zeros((SR, 2), np.float32))
+
+
+def test_resolve_engine(monkeypatch):
+    with pytest.raises(ValueError):
+        audio.resolve_engine("espeak")
+    monkeypatch.setattr(audio, "edge_available", lambda: True)
+    monkeypatch.setattr(audio, "say_available", lambda: True)
+    assert audio.resolve_engine("auto") == "edge"
+    monkeypatch.setattr(audio, "edge_available", lambda: False)
+    assert audio.resolve_engine("auto") == "say"
+    monkeypatch.setattr(audio, "say_available", lambda: False)
+    with pytest.raises(RuntimeError, match="edge-tts"):
+        audio.resolve_engine("auto")
+    with pytest.raises(RuntimeError, match="not installed"):
+        audio.resolve_engine("edge")
+
+
+def test_synthesize_voice_routes_to_engine_and_caches(tmp_path, monkeypatch):
+    from scipy.io import wavfile
+    calls = []
+
+    def fake_edge(text, voice, out):
+        calls.append((text, voice))
+        wavfile.write(str(out), 24000, (0.2 * np.sin(np.linspace(0, 900, 24000)) * 32767).astype(np.int16))
+
+    monkeypatch.setattr(audio, "edge_available", lambda: True)
+    monkeypatch.setattr(audio, "_edge", fake_edge)
+    a = audio.synthesize_voice("你好", None, tmp_path, "edge")
+    audio.synthesize_voice("你好", None, tmp_path, "edge")
+    assert len(calls) == 1 and calls[0][1] == audio.DEFAULT_VOICE["edge"]     # the second call hits the cache
+    assert a.shape[1] == 2 and abs(len(a) / SR - 1.0) < 0.05
+    audio.synthesize_voice("你好", "zh-CN-XiaoxiaoNeural", tmp_path, "edge")
+    assert len(calls) == 2                                                    # another voice is another cache entry
+    with pytest.raises(ValueError):
+        audio.synthesize_voice("  ", None, tmp_path, "edge")
+
+
+def test_decode_rejects_files_without_audio(tmp_path):
+    import subprocess
+    silent = tmp_path / "s.mp4"
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc=size=64x64:rate=30:duration=1",
+                    "-pix_fmt", "yuv420p", str(silent)], check=True)
+    with pytest.raises(ValueError, match="no audio stream"):
+        audio.decode(silent)
+    with pytest.raises(FileNotFoundError):
+        audio.decode(tmp_path / "missing.wav")
+
+
+# ---------------------------------------------------------------- media / fonts / grade / params
+def test_decode_size_keeps_aspect_and_never_upscales():
+    assert media.decode_size(1920, 1080, 960) == (960, 540)
+    assert media.decode_size(1080, 1920, 960) == (540, 960)
+    assert media.decode_size(640, 360, 1920) == (640, 360)
+
+
+def test_clean_cache_only_touches_decode_files(tmp_path):
+    (tmp_path / "0123456789abcdef.u8").write_bytes(b"x" * 10)
+    (tmp_path / "0123456789abcdef.part").write_bytes(b"x" * 5)
+    keep = [tmp_path / "notes.txt", tmp_path / "vo_abc.mp3"]
+    for p in keep:
+        p.write_bytes(b"y")
+    assert media.cache_bytes(tmp_path) == 15
+    assert media.clean_cache(tmp_path) == 15
+    assert media.cache_bytes(tmp_path) == 0
+    assert all(p.exists() for p in keep)
+
+
+def test_typeface_sans_maps_serif_roles():
+    fonts.set_typeface("sans")
+    try:
+        assert fonts._effective("serif_black") == "sans_semibold"
+        assert fonts._effective("sans_light") == "sans_light"
+    finally:
+        fonts.set_typeface("serif")
+    assert fonts._effective("serif_black") == "serif_black"
+    with pytest.raises(ValueError):
+        fonts.set_typeface("mono")
+
+
+def test_grade_looks_differ_and_unknown_is_rejected():
+    img = np.full((48, 27, 3), 120, np.uint8)
+    assert not np.array_equal(effects.Grade(27, 48, "neutral")(img), effects.Grade(27, 48, "night")(img))
+    with pytest.raises(ValueError):
+        effects.Grade(27, 48, "sepia")
+
+
+def test_effect_params_night_tuning_only_for_night_look():
+    from reel.render import effect_params
+    assert effect_params(look="neutral")["bloom"] != effect_params(look="night")["bloom"]
+    with pytest.raises(ValueError):
+        effect_params({"nope": 1})
+
+
+def test_voiceover_accepts_a_file_without_text():
+    s = spec.normalize({"voiceover": [{"file": "a.wav", "at": "s2"}]})
+    assert s["voiceover"][0]["file"] == "a.wav" and s["voiceover"][0]["text"] == ""
+
+
+def test_plan_warns_and_clamps_when_a_clip_is_too_short():
+    msgs = []
+    shots = build_plan([FakeClip(40)], 24, 152, 30, warn=msgs.append)
+    assert msgs and all("needs" in m for m in msgs)
+    assert all(s["f0"] >= 0 for s in shots if "clip" in s)
+
+
+def test_plan_is_quiet_when_clips_are_long_enough():
+    msgs = []
+    build_plan([FakeClip(900)], 24, 152, 30, warn=msgs.append)
+    assert not msgs

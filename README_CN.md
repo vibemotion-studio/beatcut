@@ -23,8 +23,8 @@
 - **音乐不断。** 合成的 D 大调 BGM 从第一个采样响到最后一个，也可以换成你自己的音乐。
 - **纯白字幕。** 6 种版式，只靠位置和入场方式区分，不靠字体和光晕。
 - **剪映风格工具箱。** 17 种特效、9 种转场，可按拍点或指定拍数区间叠加。
-- **配音会让位。** macOS `say` 的配音会压低音乐和原声，并自动出字幕。
-- **如实校验。** 每次运行最后都会对尺寸、时长、削波、爆音和静音做数值检查。
+- **配音会让位。** 用 edge-tts（任意系统，需联网）或 macOS `say` 朗读，也可以直接用录好的音频；配音会压低音乐和原声，并自动出字幕。
+- **先检查再渲染。** 素材、字体、配音文件在慢速渲染开始前先校验，出错立刻报；每次运行最后还会对尺寸、时长、削波和静音做数值检查。
 
 ## 快速开始
 
@@ -39,7 +39,7 @@ python3 -m pip install -r scripts/requirements.txt
 ln -s "$(pwd)" ~/.claude/skills/beatcut
 ```
 
-需要 Python 3.9+、`PATH` 里有 `ffmpeg` 和 `ffprobe`，以及支持 OpenGL 3.3 的驱动。
+需要 Python 3.9+、`PATH` 里有 `ffmpeg` 和 `ffprobe`，以及支持 OpenGL 3.3 的驱动。用 `edge-tts` 配音需要联网，朗读的文字会发送到微软的服务；`--tts say` 和 `--voiceover-file` 都在本机完成。
 
 装好后可以这样对智能体说：
 
@@ -64,6 +64,12 @@ python3 scripts/make_reel.py a.mp4 b.mp4 c.mp4 d.mp4 -o out/reel.mp4 --preset da
 python3 scripts/make_reel.py a.mp4 b.mp4 -o out/r.mp4 --title "上海" --subtitle "SHANG HAI" \
   --caption "bloom:外滩@brk+0.2/1.5" --effect "glitch@52-68:beat:0.6" --transition whip \
   --voiceover "这是第一句@s2"
+
+# 夜景暖色调、统一无衬线字体、使用录好的配音
+python3 scripts/make_reel.py a.mp4 b.mp4 -o out/n.mp4 --look night --typeface sans --voiceover-file narration.wav@s2
+
+# 清理解码缓存（可能有几个 GB）
+python3 scripts/make_reel.py --clean-cache -o out/reel.mp4
 
 python3 scripts/make_reel.py --list     # 全部特效、转场、字幕版式和段落
 ```
@@ -111,16 +117,16 @@ python3 scripts/make_reel.py --list     # 全部特效、转场、字幕版式�
   "bpm": 152, "beats": 96, "bgm": "synth", "transition": "whip",
   "captions": [{"layout": "bloom", "text": "铁水成花", "tag": "MOLTEN IRON", "at": "brk", "dur": 1.55}],
   "effects": [{"name": "glitch", "from": 52, "to": 68, "mode": "beat", "amt": 0.6}],
-  "voiceover": [{"text": "这是第一句", "at": "s2"}],
-  "voice": "Ting-Ting", "duck": 0.5
+  "voiceover": [{"text": "这是第一句", "at": "s2"}, {"file": "narration.wav", "text": "显示为字幕", "at": "chill"}],
+  "tts": "auto", "voice": "zh-CN-YunxiNeural", "look": "neutral", "typeface": "serif", "duck": 0.5
 }
 ```
 
-未知的键和不合法的值会被拒绝并给出提示。
+配音条目需要 `text`（由 TTS 朗读并显示为字幕）或 `file`（录好的音频文件；同时给 `text` 才会出字幕）。会互相重叠的两句会被拒绝。未知的键和不合法的值会被拒绝并给出提示。
 
 ## 校验
 
-`VALIDATION` 只做数值检查：输出尺寸、时长、音轨、削波采样、相邻采样跳变（爆音），以及开着音乐时是否有 0.25 秒的静音窗口。它不判断画面好不好看，成片请自己看一遍。字幕风格守则和它所依据的参考短片数据见 [references/style-guide.md](references/style-guide.md)。
+`VALIDATION` 只做数值检查：输出尺寸、时长、音轨、削波采样，以及开着音乐时是否有 0.25 秒的静音窗口。它不判断画面好不好看，成片请自己看一遍。字幕风格守则和它所依据的参考短片数据见 [references/style-guide.md](references/style-guide.md)。
 
 ## 目录结构
 
@@ -140,7 +146,9 @@ beatcut/
 
 ## 局限
 
-- 配音和默认字体（宋体 SC、苹方 SC）依赖 macOS。其他系统请用 `REEL_FONT_SERIF`、`REEL_FONT_SANS` 指定中文字体，这条路径没测过。
+- 默认字体（宋体 SC、苹方 SC）和 `--tts say` 依赖 macOS。其他系统请用 `REEL_FONT_SERIF`、`REEL_FONT_SANS` 指定中文字体（没测过）；edge-tts 配音在任意系统上联网即可用。
+- 素材按原比例解码，长边不超过输出长边，并缓存在磁盘上（一段 30 秒 1080p 素材约 5.6 GB）。用 `--max-clip-seconds`、`--max-source-edge`、`--clean-cache` 控制。
+- 默认调色是 `neutral`；`datihua` 预设切换到 `night`（暖色调、更强光晕）。
 - 字幕版式是为 1080×1920 设计的，其他尺寸会按比例缩放，没逐一验证。
 - `datihua` 预设和演示 GIF 使用的是打铁花素材。
 

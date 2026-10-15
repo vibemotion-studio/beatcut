@@ -1,5 +1,7 @@
 """Source clips: decoded once into a cached uint8 array, with per-frame scores, a centroid track and audio."""
 import hashlib
+import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -9,7 +11,7 @@ from scipy.ndimage import gaussian_filter1d
 
 from .synth import SR
 
-SRC_W, SRC_H = 1920, 1080
+_CACHE_FILE = re.compile(r"^[0-9a-f]{16}\.(u8|part)$")
 
 
 def _run(cmd, **kw):
@@ -17,17 +19,65 @@ def _run(cmd, **kw):
 
 
 def probe(path):
-    r = _run(["ffprobe", "-v", "error", "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(path)], text=True)
+    """{'video': bool, 'audio': bool, 'width', 'height' (as displayed, rotation applied), 'duration'}."""
+    r = _run(["ffprobe", "-v", "error", "-show_entries",
+              "stream=codec_type,width,height:stream_tags=rotate:stream_side_data=rotation:format=duration",
+              "-of", "json", str(path)], text=True)
     if r.returncode:
         raise ValueError(f"ffprobe failed for {path}: {r.stderr.strip()[-300:]}")
-    kinds = r.stdout.split()
-    return {"video": "video" in kinds, "audio": "audio" in kinds}
+    info = json.loads(r.stdout or "{}")
+    streams = info.get("streams", [])
+    v = next((s for s in streams if s.get("codec_type") == "video"), None)
+    out = {"video": v is not None, "audio": any(s.get("codec_type") == "audio" for s in streams),
+           "width": 0, "height": 0, "duration": float(info.get("format", {}).get("duration") or 0)}
+    if v:
+        w, h = v["width"], v["height"]
+        rot = v.get("tags", {}).get("rotate") or next(
+            (d["rotation"] for d in v.get("side_data_list", []) if "rotation" in d), 0)
+        if abs(round(float(rot))) % 180 == 90:
+            w, h = h, w
+        out.update(width=w, height=h)
+    return out
+
+
+def decode_size(w, h, max_long):
+    """Source size scaled down (never up) so the long side is at most max_long, both sides even."""
+    s = min(1.0, max_long / max(w, h))
+    return max(2, int(round(w * s / 2)) * 2), max(2, int(round(h * s / 2)) * 2)
+
+
+def estimate_bytes(info, fps=30, max_long=1920, max_seconds=None):
+    """Disk the decoded cache of one probed clip (see probe) will take."""
+    w, h = decode_size(info["width"], info["height"], max_long)
+    secs = min(info["duration"], max_seconds) if max_seconds else info["duration"]
+    return int(secs * fps) * w * h * 3
+
+
+def _cache_files(work_dir):
+    work = Path(work_dir)
+    if not work.is_dir():
+        return []
+    return [p for p in work.iterdir() if p.is_file() and _CACHE_FILE.match(p.name)]
+
+
+def cache_bytes(work_dir):
+    """Bytes the decoded-frame caches in work_dir already use."""
+    return sum(p.stat().st_size for p in _cache_files(work_dir))
+
+
+def clean_cache(work_dir):
+    """Delete decoded-frame caches (<16 hex>.u8 / .part) in work_dir and return the bytes freed. Touches nothing else."""
+    freed = 0
+    for p in _cache_files(work_dir):
+        freed += p.stat().st_size
+        p.unlink()
+    return freed
 
 
 class Clip:
-    """A source video normalised to ``size`` (cover-crop) at ``fps``; frames are a read-only memmap."""
+    """A source video decoded at ``fps`` in its own aspect ratio, long side at most ``max_long``; frames are a read-only memmap."""
 
-    def __init__(self, path, work_dir, fps=30, size=(SRC_W, SRC_H)):
+    def __init__(self, path, work_dir, fps=30, max_long=1920, max_seconds=None):
         self.path = Path(path).expanduser().resolve()
         if not self.path.exists():
             raise FileNotFoundError(self.path)
@@ -36,17 +86,21 @@ class Clip:
             raise ValueError(f"no video stream in {self.path}")
         self.has_audio = info["audio"]
         self.fps = fps
-        self.w, self.h = size
+        self.w, self.h = decode_size(info["width"], info["height"], max_long)
         st = self.path.stat()
-        key = hashlib.sha1(f"{self.path}|{st.st_mtime_ns}|{st.st_size}|{fps}|{size}".encode()).hexdigest()[:16]
+        key = f"{self.path}|{st.st_mtime_ns}|{st.st_size}|{fps}|{(self.w, self.h)}"
+        if max_seconds:
+            key += f"|{max_seconds}"
+        key = hashlib.sha1(key.encode()).hexdigest()[:16]
         work = Path(work_dir)
         work.mkdir(parents=True, exist_ok=True)
         raw = work / f"{key}.u8"
         if not raw.exists():
             tmp = work / f"{key}.part"
-            r = _run(["ffmpeg", "-y", "-v", "error", "-i", str(self.path), "-vf",
-                      f"fps={fps},scale={self.w}:{self.h}:force_original_aspect_ratio=increase,crop={self.w}:{self.h}",
-                      "-an", "-f", "rawvideo", "-pix_fmt", "rgb24", str(tmp)])
+            cmd = ["ffmpeg", "-y", "-v", "error"] + (["-t", str(max_seconds)] if max_seconds else []) + [
+                "-i", str(self.path), "-vf", f"fps={fps},scale={self.w}:{self.h}", "-an",
+                "-f", "rawvideo", "-pix_fmt", "rgb24", str(tmp)]
+            r = _run(cmd)
             if r.returncode:
                 tmp.unlink(missing_ok=True)
                 raise RuntimeError(f"ffmpeg decode failed for {self.path}: {r.stderr.decode()[-300:]}")

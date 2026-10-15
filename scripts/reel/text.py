@@ -62,6 +62,12 @@ def run_sprite(text, role, size, track, color=WHITE):
     return _shade(np.asarray(m, np.float32) / 255, size, color)
 
 
+def clear_caches():
+    """Drop cached glyph and line sprites (call after changing the typeface or a font override)."""
+    _chars.clear()
+    run_sprite.cache_clear()
+
+
 def fit_run(text, role, target_w, track, color=WHITE):
     """Sprite whose ink is about target_w px wide."""
     f = get_font(role, 200)

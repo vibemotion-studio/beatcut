@@ -8,9 +8,9 @@ from types import SimpleNamespace
 import numpy as np
 from scipy.io import wavfile
 
-from . import audio, bgm, checks
-from .engine import DEFAULT, Renderer, encoder
+from . import audio, bgm, checks, fonts, preflight, text
 from .effects import EFFECTS, Grade, bright, effect_env, punch_env, radial_glow, rgb_split, sat, whip_frame
+from .engine import DEFAULT, Renderer, encoder
 from .layouts import blurfill, crop_v, triptych
 from .media import Clip
 from .plan import build_plan
@@ -22,12 +22,14 @@ from .timing import sections, smooth
 from .transitions import TRANSITIONS
 
 ASSETS = Path(__file__).resolve().parents[2] / "assets"
+GB = 1024 ** 3
 
 
-def effect_params(extra=None, path=None):
-    """Render engine parameters: engine defaults, then the night-scene tuning, then file, then extra."""
+def effect_params(extra=None, path=None, look="neutral"):
+    """Render engine parameters: engine defaults, the night tuning (look 'night' only), then a file, then ``extra``."""
     p = dict(DEFAULT)
-    p.update(json.loads((ASSETS / "params_night.json").read_text()))
+    if look == "night":
+        p.update(json.loads((ASSETS / "params_night.json").read_text()))
     if path:
         p.update(json.loads(Path(path).read_text()))
     p.update(extra or {})
@@ -87,24 +89,41 @@ def _user_effects(img, effects, tg, lt, dur, beat):
 
 
 def _plan_voices(spec, sec_t, work, total_s, log):
-    """Synthesize every voiceover line and place it on the timeline. Returns [(audio, t)]."""
+    """Load or synthesize every voiceover line and place it on the timeline. Returns [(audio, t)].
+
+    Raises ValueError when two lines would overlap, so the speech never talks over itself.
+    """
     out, cursor = [], 0.4
     for v in spec["voiceover"]:
-        arr = audio.synthesize_voice(v["text"], spec["voice"], work)
+        if v["file"]:
+            raw = audio.decode(Path(v["file"]).expanduser())
+        else:
+            raw = audio.synthesize_voice(v["text"], spec["voice"], work, spec["tts"])
+        arr = audio.prepare_voice(raw)
         at = v["at"]
         base = cursor if at is None else (sec_t[at] if isinstance(at, str) else float(at))
         t = max(0.0, base + v["offset"])
         dur = len(arr) / SR
         if t + dur > total_s:
-            log(f"Warning: voiceover '{v['text'][:16]}...' ends at {t + dur:.1f}s, past the {total_s:.1f}s video")
+            label = (v["text"] or v["file"])[:16]
+            log(f"Warning: voiceover '{label}' ends at {t + dur:.1f}s, past the {total_s:.1f}s video")
         out.append((arr, t))
         cursor = t + dur + 0.3
+    spans = sorted((t, t + len(a) / SR, i) for i, (a, t) in enumerate(out))
+    for (s0, e0, i0), (s1, _, i1) in zip(spans, spans[1:]):
+        if s1 < e0 - 1e-3:
+            raise ValueError(f"voiceover[{i0}] ({s0:.1f}-{e0:.1f}s) overlaps voiceover[{i1}] (starts at {s1:.1f}s); "
+                             f"move one with 'at' or 'offset'")
     return out
 
 
 def render_reel(clip_paths, out_path, spec=None, size=(1080, 1920), fps=30, crf=17, params_file=None,
-                work_dir=None, src_size=(1920, 1080), log=print):
-    """Render a reel. Returns dict(path, seconds, frames, checks=[(name, ok, detail)])."""
+                work_dir=None, max_long=None, max_clip_seconds=None, log=print):
+    """Render a reel. Returns dict(path, seconds, frames, checks=[(name, ok, detail)]).
+
+    Source clips are decoded in their own aspect ratio with the long edge at most ``max_long`` pixels
+    (default: the output's long edge) and at most ``max_clip_seconds`` seconds each.
+    """
     spec = normalize(spec)
     if not clip_paths:
         raise ValueError("need at least one input clip")
@@ -112,12 +131,18 @@ def render_reel(clip_paths, out_path, spec=None, size=(1080, 1920), fps=30, crf=
     out = Path(out_path).expanduser().resolve()
     out.parent.mkdir(parents=True, exist_ok=True)
     work = Path(work_dir).expanduser() if work_dir else out.parent / ".reel-cache"
-    work.mkdir(parents=True, exist_ok=True)
+    max_long = max_long or max(W, H)
 
-    clips = [Clip(p, work, fps, src_size) for p in clip_paths]
+    fonts.set_typeface(spec["typeface"])
+    text.clear_caches()
+    need = preflight.run(clip_paths, spec, work, fps, max_long, max_clip_seconds)
+    if need > GB // 4:
+        log(f"decoding the clips needs up to {need / GB:.1f} GB of cache in {work} (--clean-cache removes it)")
+
+    clips = [Clip(p, work, fps, max_long, max_clip_seconds) for p in clip_paths]
     nb, bpm = spec["beats"], spec["bpm"]
     beat = 60.0 / bpm
-    shots = build_plan(clips, nb, bpm, fps, spec["transition"])
+    shots = build_plan(clips, nb, bpm, fps, spec["transition"], warn=lambda m: log(f"Warning: {m}"))
     starts, acc = [], 0
     for s in shots:
         starts.append(acc)
@@ -136,11 +161,12 @@ def render_reel(clip_paths, out_path, spec=None, size=(1080, 1920), fps=30, crf=
         t0 = (c["beat"] * beat if c["beat"] is not None else sec_t[c["at"]]) + c["offset"]
         overlays.append(Caption(c["layout"], c["text"], t0, c["dur"], c["tag"], beat))
     if spec["voice_subtitles"]:
-        overlays += [Caption("subtitle", v["text"], t, len(a) / SR) for v, (a, t) in zip(spec["voiceover"], voices)]
+        overlays += [Caption("subtitle", v["text"], t, len(a) / SR)
+                     for v, (a, t) in zip(spec["voiceover"], voices) if v["text"]]
 
-    params = effect_params(spec["params"], params_file)
+    params = effect_params(spec["params"], params_file, spec["look"])
     rnd = Renderer(W, H)
-    grade = Grade(W, H)
+    grade = Grade(W, H, spec["look"])
     burst_map = radial_glow(W, H)
     px = W / 1080.0
     fade_n = min(38, max(6, total // 6))
@@ -222,7 +248,7 @@ def render_reel(clip_paths, out_path, spec=None, size=(1080, 1920), fps=30, crf=
     crackle = (ctx.energy, fin, fps) if fin is not None and ctx.energy else None
     mix = audio.mix_reel(total_s, music, events, whips, crackle, voices, spec["duck"], spec["seed"])
     wav = work / "reel_audio.wav"
-    wavfile.write(str(wav), SR, (mix * 32767).astype(np.int16))
+    wavfile.write(str(wav), SR, (np.clip(mix, -1.0, 1.0) * 32767).astype(np.int16))   # clip first: int16 would wrap
     r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(silent), "-i", str(wav), "-c:v", "copy", "-c:a", "aac",
                         "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(out)], capture_output=True, text=True)
     if r.returncode:

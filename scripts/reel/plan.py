@@ -20,8 +20,26 @@ def _chunks(b0, b1, size=4):
     return out
 
 
-def build_plan(clips, nb, bpm, fps, transition=None, trans_frames=6):
-    """Return a list of shot dicts tiling beats 0..nb exactly (sum of ``n`` == beat_frame(nb))."""
+def _fit_starts(shots, clips, warn):
+    """Keep every shot's source range inside its clip. Shots that continue a previous one are only warned about."""
+    for s in shots:
+        if "clip" not in s:
+            continue
+        n_src = len(clips[s["clip"]])
+        playing = s["kind"] in ("play", "tri", "finale")
+        need = int(s["n"] * s.get("speed", 1.0)) + 1 if playing else 1
+        if playing and s["name"] != "continue":
+            s["f0"] = max(0, min(s["f0"], n_src - need))
+        if s["f0"] + need > n_src and warn:
+            warn(f"shot '{s['name']}' needs {need} frames of clip {s['clip'] + 1} from frame {s['f0']} but the clip "
+                 f"has {n_src}; the last frame will hold")
+
+
+def build_plan(clips, nb, bpm, fps, transition=None, trans_frames=6, warn=None):
+    """Return a list of shot dicts tiling beats 0..nb exactly (sum of ``n`` == beat_frame(nb)).
+
+    ``warn(message)`` is called for every shot whose source range does not fit its clip.
+    """
     if not clips:
         raise ValueError("need at least one clip")
     E = lambda b: beat_frame(b, bpm, fps)
@@ -40,10 +58,11 @@ def build_plan(clips, nb, bpm, fps, transition=None, trans_frames=6):
 
     cur = 1 % nc           # rotating clip index for the quick plays
     g_last = (0, 0)        # (clip, frame) where the last quick play ended, for the hold and the continuation
-    for sid, st, b0, b1 in sections(nb):
+    for sid, _, b0, b1 in sections(nb):
         if sid == "intro":
+            rv = min(2.4, 0.85 * (E(b1) - E(b0)) / fps)     # reveal must finish inside the shot
             add(sid, b0, b1, name="intro", kind="hold", clip=0, f0=win(0, 0), layout="track", zoom=1.0,
-                push=0.05, q=lambda t: smooth(t / 2.4))
+                push=0.05, q=lambda t, rv=rv: smooth(t / rv))
         elif sid == "s2":
             need = int((E(b1) - E(b0)) * 0.5) + 1      # source frames a half-speed play consumes
             add(sid, b0, b1, name="slow", kind="play", clip=0, f0=max(0, min(win(0, 0), len(clips[0]) - need)),
@@ -74,8 +93,9 @@ def build_plan(clips, nb, bpm, fps, transition=None, trans_frames=6):
         elif sid == "chill":
             ci = cur % nc
             cur += 1
+            rv = min(1.6, 0.85 * (E(b1) - E(b0)) / fps)
             add(sid, b0, b1, name="reveal2", kind="play", clip=ci, f0=0, speed=1.0, layout="track", zoom=1.0,
-                q=lambda t: smooth(t / 1.6), audio=0.4, trans=trans())
+                q=lambda t, rv=rv: smooth(t / rv), audio=0.4, trans=trans())
         elif sid == "peak":
             for k in range(b1 - b0):
                 ci = (k + 1) % nc
@@ -88,4 +108,5 @@ def build_plan(clips, nb, bpm, fps, transition=None, trans_frames=6):
         elif sid == "fin":
             fc = nc - 1
             add(sid, b0, b1, name="finale", kind="finale", clip=fc, f0=cap(fc, 30), speed=0.3, whip=True)
+    _fit_starts(shots, clips, warn)
     return shots

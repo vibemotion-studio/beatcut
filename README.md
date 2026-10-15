@@ -23,8 +23,8 @@ Colorize reveal · whip-spin cuts · BGM that never stops · captions · voiceov
 - **Music that never stops.** A synthesized D-major BGM runs from the first to the last sample, or bring your own track.
 - **Flat white typography.** Six caption layouts that differ by position and entrance, never by font or glow.
 - **CapCut-style toolbox.** 17 effects and 9 transitions you can place on beats or over a range of beats.
-- **Voiceover that behaves.** macOS `say` lines duck the music and footage audio and appear as subtitles.
-- **Honest checks.** Each run ends with numeric checks on size, duration, clipping, clicks and silence.
+- **Voiceover that behaves.** Speak lines with edge-tts (any OS, online) or macOS `say`, or bring a recorded file. Voices duck the music and footage audio and appear as subtitles.
+- **Fails early, checks honestly.** Inputs, fonts and voice files are verified before the slow render starts, and each run ends with numeric checks on size, duration, clipping and silence.
 
 ## Quick start
 
@@ -39,7 +39,7 @@ python3 -m pip install -r scripts/requirements.txt
 ln -s "$(pwd)" ~/.claude/skills/beatcut
 ```
 
-Needs Python 3.9+, `ffmpeg` and `ffprobe` on `PATH`, and an OpenGL 3.3 driver.
+Needs Python 3.9+, `ffmpeg` and `ffprobe` on `PATH`, and an OpenGL 3.3 driver. Voiceover through `edge-tts` needs internet access and sends the spoken text to Microsoft's service; `--tts say` and `--voiceover-file` stay on your machine.
 
 Then ask your agent:
 
@@ -64,6 +64,12 @@ python3 scripts/make_reel.py a.mp4 b.mp4 c.mp4 d.mp4 -o out/reel.mp4 --preset da
 python3 scripts/make_reel.py a.mp4 b.mp4 -o out/r.mp4 --title "Shanghai" --subtitle "SHANG HAI" \
   --caption "bloom:The Bund@brk+0.2/1.5" --effect "glitch@52-68:beat:0.6" --transition whip \
   --voiceover "First line@s2"
+
+# Warm night grade, one sans family, a recorded voiceover
+python3 scripts/make_reel.py a.mp4 b.mp4 -o out/n.mp4 --look night --typeface sans --voiceover-file narration.wav@s2
+
+# Free the decoded-clip cache (it can reach several GB)
+python3 scripts/make_reel.py --clean-cache -o out/reel.mp4
 
 python3 scripts/make_reel.py --list     # every effect, transition, layout and section id
 ```
@@ -111,16 +117,16 @@ Presets and `--preset file.json` use the same keys as the flags:
   "bpm": 152, "beats": 96, "bgm": "synth", "transition": "whip",
   "captions": [{"layout": "bloom", "text": "铁水成花", "tag": "MOLTEN IRON", "at": "brk", "dur": 1.55}],
   "effects": [{"name": "glitch", "from": 52, "to": 68, "mode": "beat", "amt": 0.6}],
-  "voiceover": [{"text": "First line", "at": "s2"}],
-  "voice": "Ting-Ting", "duck": 0.5
+  "voiceover": [{"text": "First line", "at": "s2"}, {"file": "narration.wav", "text": "Shown as subtitle", "at": "chill"}],
+  "tts": "auto", "voice": "zh-CN-YunxiNeural", "look": "neutral", "typeface": "serif", "duck": 0.5
 }
 ```
 
-Unknown keys and bad values are rejected with a message.
+A voiceover entry needs `text` (spoken by the TTS engine and shown as a subtitle) or `file` (a recorded audio file; add `text` as well to get a subtitle). Two lines that would overlap are rejected. Unknown keys and bad values are rejected with a message.
 
 ## Checks
 
-`VALIDATION` is numeric only: output size, duration, audio track, clipped samples, sample-to-sample clicks, and (with music on) any quiet 0.25 s window. It does not judge how the video looks, so watch the result yourself. The caption style rules and the reel they were measured from are in [references/style-guide.md](references/style-guide.md).
+`VALIDATION` is numeric only: output size, duration, audio track, clipped samples, and (with music on) any quiet 0.25 s window. It does not judge how the video looks, so watch the result yourself. The caption style rules and the reel they were measured from are in [references/style-guide.md](references/style-guide.md).
 
 ## Repository layout
 
@@ -140,7 +146,9 @@ beatcut/
 
 ## Limits
 
-- Voiceover and the default fonts (Songti SC, PingFang SC) need macOS. Elsewhere set `REEL_FONT_SERIF` and `REEL_FONT_SANS` to a CJK font; that path is untested.
+- The default fonts (Songti SC, PingFang SC) and `--tts say` need macOS. Elsewhere set `REEL_FONT_SERIF` and `REEL_FONT_SANS` to a CJK font (untested); edge-tts voiceover works on any OS with internet access.
+- Clips are decoded in their own aspect ratio, long edge capped at the output's long edge, and cached on disk (a 30 s 1080p clip is about 5.6 GB). Use `--max-clip-seconds`, `--max-source-edge` and `--clean-cache` to control it.
+- The default look is `neutral`; the `datihua` preset switches to `night` (warm grade, stronger glow).
 - Caption layouts are designed for 1080×1920 and scale to other sizes; not every size was checked.
 - The `datihua` preset and the demo GIF use iron-fireworks footage.
 
